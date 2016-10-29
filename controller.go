@@ -4,11 +4,15 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
-	"sync"
 	"time"
 
 	"context"
 )
+
+// ErrContextCancelled is returned by Run() or Wait() when the search
+// has been prematurely cancelled by the context before an acceptable
+// solution was found.
+var ErrContextCancelled = errors.New("search cancelled by context")
 
 func init() {
 	rand.Seed(time.Now().UTC().UnixNano())
@@ -21,15 +25,22 @@ type Params struct {
 	// population should make it into the next generation unchanged?
 	Elitism int
 
-	// 0-1; What portion of the surviving population should undergo mutation?
-	Mutation float32
+	// 0-1; What portion of the population should undergo mutation?
+	Mutation float64
 
-	// 0-1; What portion of the surviving population should undergo crossover?
-	Crossover float32
+	// Should we change the mutation rate based on search convergence?
+	AdaptiveMutation bool
+
+	// 0-1; What portion of the population should undergo crossover?
+	Crossover float64
 
 	// What is the target fitness score, at which point the
 	// algorithm will terminate?
 	TargetFitness float64
+
+	// Parallelism dictates how many goroutines will be used to calculate
+	// the fitness of a population. The default is one.
+	Parallelism int
 
 	// SelectionMethod is the method by which the genetic algorithm
 	// chooses a partner for crossover.
@@ -56,21 +67,20 @@ type Controller struct {
 	params     Params
 	population *Population
 
-	sync.Mutex
 	err chan error
 }
 
 // NewController is the constructor for Controller. It returns an error
 // if any of the input parameters are not allowed.
 func NewController(params Params) (*Controller, error) {
-	if !isFrac(params.Crossover) {
-		return nil, errors.New("crossover factor must be between 0 and 1")
+	if !isProb(params.Crossover) {
+		return nil, errors.New("crossover factor must be between 0 and 1, inclusive")
 	}
 	if params.Elitism < 0 {
 		return nil, errors.New("elitism factor must be greater than 0")
 	}
-	if !isFrac(params.Mutation) {
-		return nil, errors.New("mutation factor must be between 0 and 1")
+	if !isProb(params.Mutation) {
+		return nil, errors.New("mutation factor must be between 0 and 1, inclusive")
 	}
 	if params.SelectionMethod == nil {
 		return nil, errors.New("selection method cannot be nil")
@@ -86,27 +96,22 @@ func NewController(params Params) (*Controller, error) {
 	}, nil
 }
 
-func isFrac(d float32) bool {
+func isProb(d float64) bool {
 	return d >= 0 && d <= 1
 }
 
 func (c *Controller) run(ctx context.Context) error {
-	c.Lock()
-	defer c.Unlock()
-
 	// Score initial population
-	err := c.population.scoreAndSort()
+	err := c.population.scoreAndSort(c.params.Parallelism)
 	if err != nil {
 		return err
 	}
-	c.Unlock()
 
 	// Loop through generations until target fitness is acheived.
 	for !c.population.TargetMet(c.params.TargetFitness) {
-		c.Lock()
 		select {
 		case <-ctx.Done():
-			return errors.New("search cancelled by context")
+			return ErrContextCancelled
 		default:
 		}
 		_, err := c.population.FittestScore()
@@ -119,11 +124,10 @@ func (c *Controller) run(ctx context.Context) error {
 		if err := c.performMutations(); err != nil {
 			return fmt.Errorf("mutation step failed: %s", err)
 		}
-		err = c.population.scoreAndSort()
+		err = c.population.scoreAndSort(c.params.Parallelism)
 		if err != nil {
 			return err
 		}
-		c.Unlock()
 	}
 
 	return nil
@@ -165,8 +169,8 @@ func (c *Controller) performCrossovers() error {
 	for i, ind := range c.population.pop {
 
 		// Should we perform crossover on this individual?
-		if c.params.Crossover > rand.Float32() && i >= c.params.Elitism {
-			parent, err := c.params.SelectionMethod(ind.Individual, c.population)
+		if c.params.Crossover > rand.Float64() && i >= c.params.Elitism {
+			parent, err := c.params.SelectionMethod(c.population)
 			if err != nil {
 				return err
 			}
@@ -189,9 +193,36 @@ func (c *Controller) performMutations() error {
 	var err error
 	newGeneration := make([]Individual, len(c.population.pop))
 	for i, ind := range c.population.pop {
+		mutatationRate := c.params.Mutation
+
+		// Are we using an adaptive mutation rate?
+		if c.params.AdaptiveMutation {
+			currScore, err := ind.Fitness()
+			if err != nil {
+				return err
+			}
+			avgFitness, err := c.population.AvgFitness()
+			if err != nil {
+				return err
+			}
+			if currScore > avgFitness {
+				fittestScore, err := c.population.FittestScore()
+				if err != nil {
+					return err
+				}
+
+				delta1 := fittestScore - currScore
+				delta2 := fittestScore - avgFitness
+				if delta2 == 0 {
+					mutatationRate = 1 // If the average and the fittest are the same, we need some mutation
+				} else {
+					mutatationRate = delta1 / delta2 * c.params.Mutation
+				}
+			}
+		}
 
 		// Should we perform mutation on this individual?
-		if c.params.Mutation > rand.Float32() && i >= c.params.Elitism {
+		if mutatationRate > rand.Float64() && i >= c.params.Elitism {
 			mutated, err := ind.Mutate()
 			if err != nil {
 				return err

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"math/rand"
 
-	"github.com/tomjcleveland/kurt/genetic"
+	"github.com/tomjcleveland/genetic"
 )
 
 // target is the string we're trying to get the genetic algorithm

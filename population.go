@@ -6,7 +6,6 @@ import (
 	"log"
 	"math"
 	"reflect"
-	"sort"
 )
 
 // Population holds all the individuals in the
@@ -59,8 +58,12 @@ func (p *Population) Fittest() (Individual, error) {
 	max := -math.MaxFloat64
 	var fittest Individual
 	for _, ind := range p.pop {
-		if ind.score > max {
-			max = ind.score
+		score, err := ind.Fitness()
+		if err != nil {
+			return nil, err
+		}
+		if score > max {
+			max = score
 			fittest = ind.Individual
 		}
 	}
@@ -95,14 +98,20 @@ func (p *Population) TotalFitness() (float64, error) {
 	return total, nil
 }
 
-func (p *Population) scoreAndSort() error {
-	for i, ind := range p.pop {
-		score, err := ind.Fitness()
-		if err != nil {
-			return err
-		}
-		p.pop[i].score = score
+// AvgFitness returns the average fitness of the population
+func (p *Population) AvgFitness() (float64, error) {
+	sum, err := p.TotalFitness()
+	if err != nil {
+		return 0, err
 	}
-	sort.Sort(sort.Reverse(pairs(p.pop)))
+	return sum / float64(len(p.pop)), nil
+}
+
+func (p *Population) scoreAndSort(workers int) error {
+	newPop, err := calculateFitnessConcurrently(p.pop, workers)
+	if err != nil {
+		return err
+	}
+	p.pop = newPop
 	return nil
 }

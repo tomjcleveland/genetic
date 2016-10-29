@@ -1,5 +1,6 @@
 package genetic
 
+// fakeIndividual is a mock/stub of Individual used for unit tests
 type fakeIndividual struct {
 	id int
 
