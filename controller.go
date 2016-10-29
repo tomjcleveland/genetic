@@ -4,38 +4,14 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"sync"
 	"time"
+
+	"context"
 )
 
 func init() {
 	rand.Seed(time.Now().UTC().UnixNano())
-}
-
-// SelectionMethod is used to choose a second Individual
-// during crossover.
-type SelectionMethod func(Individual, *Population) (Individual, error)
-
-// Roulette is a SelectionMethod that picks a partner for an individual
-// at random, weighting the likelihood of picking a particular partner
-// with that partner's fitness.
-func Roulette(ind Individual, pop *Population) (Individual, error) {
-	totalFitness, err := pop.TotalFitness()
-	if err != nil {
-		return nil, err
-	}
-	position := rand.Float64() * totalFitness
-	spinWheel := float64(0)
-	for _, curr := range pop.pop {
-		fitness, err := curr.Fitness()
-		if err != nil {
-			return nil, err
-		}
-		spinWheel += fitness
-		if spinWheel >= position {
-			return curr.Individual, nil
-		}
-	}
-	return pop.pop[len(pop.pop)-1].Individual, nil
 }
 
 // Params holds all of the parameters for the
@@ -79,6 +55,9 @@ func (p pairs) Less(i, j int) bool { return p[i].score < p[j].score }
 type Controller struct {
 	params     Params
 	population *Population
+
+	sync.Mutex
+	err chan error
 }
 
 // NewController is the constructor for Controller. It returns an error
@@ -103,6 +82,7 @@ func NewController(params Params) (*Controller, error) {
 	return &Controller{
 		params:     params,
 		population: pop,
+		err:        make(chan error),
 	}, nil
 }
 
@@ -110,18 +90,25 @@ func isFrac(d float32) bool {
 	return d >= 0 && d <= 1
 }
 
-// Run runs the genetic algorithm until an individual with
-// the target fitness level is found. It returns only after
-// finding this individual.
-func (c *Controller) Run() error {
+func (c *Controller) run(ctx context.Context) error {
+	c.Lock()
+	defer c.Unlock()
+
 	// Score initial population
 	err := c.population.scoreAndSort()
 	if err != nil {
 		return err
 	}
+	c.Unlock()
 
 	// Loop through generations until target fitness is acheived.
 	for !c.population.TargetMet(c.params.TargetFitness) {
+		c.Lock()
+		select {
+		case <-ctx.Done():
+			return errors.New("search cancelled by context")
+		default:
+		}
 		_, err := c.population.FittestScore()
 		if err != nil {
 			return err
@@ -136,9 +123,40 @@ func (c *Controller) Run() error {
 		if err != nil {
 			return err
 		}
+		c.Unlock()
 	}
 
 	return nil
+}
+
+// Run runs the genetic algorithm until an individual with
+// the target fitness level is found. It returns only after
+// finding this individual.
+func (c *Controller) Run() error {
+	c.Start(context.Background())
+	return c.Wait()
+}
+
+// Start begins the genetic algorithm in a new goroutine, and
+// returns immediately. The context parameter can be used to
+// prematurely cancel a long-running search.
+func (c *Controller) Start(ctx context.Context) {
+	go func() {
+		c.err <- c.run(ctx)
+	}()
+}
+
+// Wait blocks until the target fitness has been acheived.
+func (c *Controller) Wait() error {
+	if err, ok := <-c.err; ok {
+		return err
+	}
+	return errors.New("error channel is closed")
+}
+
+// Fittest returns the fittest individual in the current population.
+func (c *Controller) Fittest() (Individual, error) {
+	return c.population.Fittest()
 }
 
 func (c *Controller) performCrossovers() error {
