@@ -33,6 +33,9 @@ func NewPopulation(pop interface{}) (*Population, error) {
 		}
 		out.pop = append(out.pop, indWithScore{ind, 0})
 	}
+	if len(out.pop) == 0 {
+		return nil, errors.New("cannot pass in empty slice")
+	}
 	return out, nil
 }
 
