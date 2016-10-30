@@ -91,7 +91,7 @@ func Test_Fittest_FittestIndividualReturned(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fittest := indWithScore{score: 1, Individual: fakeIndividual{id: 3}}
+	fittest := indWithScore{score: 1, Individual: fakeIndividual{id: 3, fitness: 1}}
 	pop.pop = append(pop.pop, fittest)
 
 	ret, err := pop.Fittest()
@@ -146,7 +146,7 @@ func Test_scoreAndSort_PopulationScoredAndSorted(t *testing.T) {
 	id4 := indWithScore{score: 1, Individual: fakeIndividual{id: 4, fitness: 1}}
 	pop.pop = append(pop.pop, id3, id4)
 
-	err = pop.scoreAndSort()
+	err = pop.scoreAndSort(1)
 	if err != nil {
 		t.Fatal(err)
 	}

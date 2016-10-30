@@ -12,7 +12,7 @@ func calculateFitnessConcurrently(in []indWithScore, workers int) (out []indWith
 		workers = 1
 	}
 	jobs := make(chan indWithScore)
-	results := make(chan result)
+	results := make(chan result, workers)
 
 	// Spin up workers
 	for i := 0; i < workers; i++ {

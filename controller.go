@@ -197,28 +197,11 @@ func (c *Controller) performMutations() error {
 
 		// Are we using an adaptive mutation rate?
 		if c.params.AdaptiveMutation {
-			currScore, err := ind.Fitness()
+			adaptiveFactor, err := c.population.getAdaptiveMutationRate(ind.Individual)
 			if err != nil {
 				return err
 			}
-			avgFitness, err := c.population.AvgFitness()
-			if err != nil {
-				return err
-			}
-			if currScore > avgFitness {
-				fittestScore, err := c.population.FittestScore()
-				if err != nil {
-					return err
-				}
-
-				delta1 := fittestScore - currScore
-				delta2 := fittestScore - avgFitness
-				if delta2 == 0 {
-					mutatationRate = 1 // If the average and the fittest are the same, we need some mutation
-				} else {
-					mutatationRate = delta1 / delta2 * c.params.Mutation
-				}
-			}
+			mutatationRate = adaptiveFactor * c.params.Mutation
 		}
 
 		// Should we perform mutation on this individual?

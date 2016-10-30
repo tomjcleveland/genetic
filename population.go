@@ -115,3 +115,24 @@ func (p *Population) scoreAndSort(workers int) error {
 	p.pop = newPop
 	return nil
 }
+
+func (p *Population) getAdaptiveMutationRate(ind Individual) (float64, error) {
+	currScore, err := ind.Fitness()
+	if err != nil {
+		return 0, err
+	}
+	avgFitness, err := p.AvgFitness()
+	if err != nil {
+		return 0, err
+	}
+	if currScore > avgFitness {
+		fittestScore, err := p.FittestScore()
+		if err != nil {
+			return 0, err
+		}
+		delta1 := fittestScore - currScore
+		delta2 := fittestScore - avgFitness
+		return delta1 / delta2, nil
+	}
+	return 1, nil
+}

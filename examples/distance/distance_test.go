@@ -15,10 +15,10 @@ func Test_Distance_Run(t *testing.T) {
 		Mutation:         0.9,
 		Crossover:        0.9,
 		TargetFitness:    -1,
-		Parallelism:      100,
+		Parallelism:      10,
 		SelectionMethod:  genetic.Tournament(100),
-		InitPop:          testPopulation(500),
-		AdaptiveMutation: false,
+		InitPop:          testPopulation(5000),
+		AdaptiveMutation: true,
 	})
 	if err != nil {
 		t.Fatal(err)
