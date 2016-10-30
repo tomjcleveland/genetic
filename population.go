@@ -76,7 +76,6 @@ func (p *Population) FittestScore() (float64, error) {
 	if err != nil {
 		return 0, err
 	}
-	log.Printf("Fittest: %v", fittest)
 	fitness, err := fittest.Fitness()
 	if err != nil {
 		return 0, err

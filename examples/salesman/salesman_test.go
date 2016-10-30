@@ -1,20 +1,22 @@
-package distance
+package salesman
 
 import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/tomjcleveland/genetic"
 	"golang.org/x/net/context"
+
+	"math/rand"
+
+	"github.com/tomjcleveland/genetic"
 )
 
-func Test_Distance_Run(t *testing.T) {
+func Test_Salesman_Run(t *testing.T) {
 	ctrl, err := genetic.NewController(genetic.Params{
 		Elitism:          3,
 		Mutation:         0.8,
 		Crossover:        0.7,
-		TargetFitness:    -1,
+		TargetFitness:    10,
 		Parallelism:      10,
 		SelectionMethod:  genetic.Tournament(10),
 		InitPop:          testPopulation(50),
@@ -43,7 +45,7 @@ func Test_Distance_Run(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		assert.True(t, -ld(target, string(fittest.(dString))) >= -1)
+		t.Logf("Fittest: %+v", fittest)
 	}
 	if err != nil {
 		t.Fatal(err)
@@ -51,19 +53,29 @@ func Test_Distance_Run(t *testing.T) {
 }
 
 func testPopulation(n int) []genetic.Individual {
-	var popStrings []string
+	mapScale := 50
+	numCities := 10
+	paths := make([]genetic.Individual, n)
+
 	for i := 0; i < n; i++ {
-		curr := ""
-		for j := 0; j < len(target); j++ {
-			curr += string(randCharacter())
+		seen := make(map[city]bool)
+		cities := make([]*city, numCities)
+		for j := 0; j < numCities; j++ {
+			curr := &city{
+				x: rand.Intn(mapScale),
+				y: rand.Intn(mapScale),
+			}
+			for seen[*curr] {
+				curr = &city{
+					x: rand.Intn(mapScale),
+					y: rand.Intn(mapScale),
+				}
+			}
+			seen[*curr] = true
+			cities[j] = curr
 		}
-		popStrings = append(popStrings, curr)
+		paths[i] = genetic.Individual(path(cities))
 	}
 
-	var out []genetic.Individual
-	for _, i := range popStrings {
-		ds := dString(i)
-		out = append(out, ds)
-	}
-	return out
+	return paths
 }

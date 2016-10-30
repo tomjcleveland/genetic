@@ -14,13 +14,13 @@ var target = "this is the target string"
 // dString implements Individual
 type dString string
 
-func (d dString) Mutate() (genetic.Individual, error) {
+func (d dString) Mutate(rate float64) (genetic.Individual, error) {
 	stringBytes := []byte(d)
-	if len(stringBytes) == 0 {
-		return dString(""), nil
+	for i := 0; i < len(d); i++ {
+		if rand.Float64() < rate {
+			stringBytes[i] = randCharacter()
+		}
 	}
-	index := rand.Intn(len(stringBytes))
-	stringBytes[index] = randCharacter()
 
 	return dString(stringBytes), nil
 }

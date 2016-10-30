@@ -3,6 +3,7 @@ package genetic
 import (
 	"errors"
 	"fmt"
+	"log"
 	"math/rand"
 	"time"
 
@@ -114,10 +115,17 @@ func (c *Controller) run(ctx context.Context) error {
 			return ErrContextCancelled
 		default:
 		}
-		_, err := c.population.FittestScore()
+		fittestScore, err := c.population.FittestScore()
 		if err != nil {
 			return err
 		}
+		fittest, err := c.population.Fittest()
+		if err != nil {
+			return err
+		}
+		log.Printf("Fittest: %v", fittest)
+		log.Printf("Fittest Score: %.4f", fittestScore)
+
 		if err := c.performCrossovers(); err != nil {
 			return fmt.Errorf("crossover step failed: %s", err)
 		}
@@ -205,8 +213,8 @@ func (c *Controller) performMutations() error {
 		}
 
 		// Should we perform mutation on this individual?
-		if mutatationRate > rand.Float64() && i >= c.params.Elitism {
-			mutated, err := ind.Mutate()
+		if i >= c.params.Elitism {
+			mutated, err := ind.Mutate(mutatationRate)
 			if err != nil {
 				return err
 			}
